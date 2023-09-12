@@ -1,0 +1,265 @@
+from __future__ import print_function
+
+import re
+import jwt
+from jwt import PyJWKClient
+import cryptography
+from cryptography.x509 import load_pem_x509_certificate
+
+def lambda_handler(event, context):
+    """Do not print the auth token unless absolutely necessary """
+    print("Client token: " + event['authorizationToken'])
+    print("Method ARN: " + event['methodArn'])
+    """validate the incoming token"""
+    """and produce the principal user identifier associated with the token"""
+
+    """this could be accomplished in a number of ways:"""
+    """1. Call out to OAuth provider"""
+    """2. Decode a JWT token inline"""
+    """3. Lookup in a self-managed DB"""
+    principalId = "user|a1b2c3d4"
+
+    """you can send a 401 Unauthorized response to the client by failing like so:"""
+    """raise Exception('Unauthorized')"""
+
+    """if the token is valid, a policy must be generated which will allow or deny access to the client"""
+
+    """if access is denied, the client will recieve a 403 Access Denied response"""
+    """if access is allowed, API Gateway will proceed with the backend integration configured on the method that was called"""
+
+    """this function must generate a policy that is associated with the recognized principal user identifier."""
+    """depending on your use case, you might store policies in a DB, or generate them on the fly"""
+
+    """keep in mind, the policy is cached for 5 minutes by default (TTL is configurable in the authorizer)"""
+    """and will apply to subsequent calls to any method/resource in the RestApi"""
+    """made with the same token"""
+    
+    
+
+    """the example policy below denies access to all resources in the RestApi"""
+    tmp = event['methodArn'].split(':')
+    apiGatewayArnTmp = tmp[5].split('/')
+    awsAccountId = tmp[4]
+
+    policy = AuthPolicy(principalId, awsAccountId)
+    policy.restApiId = apiGatewayArnTmp[0]
+    policy.region = tmp[3]
+    policy.stage = apiGatewayArnTmp[1]
+    """policy.denyAllMethods()"""
+    """policy.allowMethod(HttpVerb.GET, "/pets/*")"""
+    access_token = event['authorizationToken']
+    
+    #publicKey = b"-----BEGIN CERTIFICATE-----\nMIII9TCCB92gAwIBAgIQAawwhubr5hqCk+Xtn8oBLzANBgkqhkiG9w0BAQsFADBPMQswCQYDVQQG\nEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMSkwJwYDVQQDEyBEaWdpQ2VydCBUTFMgUlNBIFNI\nQTI1NiAyMDIwIENBMTAeFw0yMTA2MDMwMDAwMDBaFw0yMjA3MDQyMzU5NTlaMHsxCzAJBgNVBAYT\nAlVTMRAwDgYDVQQIEwdJbmRpYW5hMRUwEwYDVQQHEwxJbmRpYW5hcG9saXMxFTATBgNVBAoTDEFu\ndGhlbSwgSW5jLjEsMCoGA1UEAxMjc2VjdXJlLWdhdGV3YXkudWF0LnZhLmFudGhlbWluYy5jb20w\nggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDCaEf86+tspqgRH8tRBySID2+n27qZ1n0G\nJv/YzwAV8aA5lmqZJRiFePuUXg8jBUMMMbHx25Bn0kXQ/Obkp5c/jkURqzZ/KY0UhS2ku7lw1lf3\nE4K4bwnb0LTFysXHTGG0MQVJFqxKucJwW0K+LWbu5e5U5cUx0giU3YSj85SJC26ruRJOrpvHF46l\nrcsw/bnsEoczuzLXwKADiHhptnJNMT4eVIBe01zC8ouF6AToJssO2tFPdSt+U9+zgiA1EqglB23e\ndZPSGjR3zErJ6Xz/MvPCg9JMxlQ5lKHm0rvhI+X0vNQivZdpBkwCF8eQ1flkgJCrEugomHpzameD\nMqlVAgMBAAGjggWfMIIFmzAfBgNVHSMEGDAWgBS3a6LqqKqEjHnqtNoPmLLFlXa59DAdBgNVHQ4E\nFgQUPPfjbjgE/b6m6NIefzCy0+xVscAwggJMBgNVHREEggJDMIICP4Ijc2VjdXJlLWdhdGV3YXku\ndWF0LnZhLmFudGhlbWluYy5jb22CF3Nzb3N0YWdlLmVtcGlyZWJsdWUuY29tgi9zZWN1cmUtZ2F0\nZXdheS51YXQudmEuc2ltcGx5aGVhbHRoY2FyZXBsYW5zLmNvbYItc2VjdXJlLWdhdGV3YXkudWF0\nLnZhLmNsZWFyaGVhbHRoYWxsaWFuY2UuY29tgiBzZWN1cmUtZ2F0ZXdheS51YXQudmEuYW50aGVt\nLmNvbYIgc2VjdXJlLWdhdGV3YXkudWF0LnZhLmJjYnNnYS5jb22CIXNlY3VyZS1nYXRld2F5LnVh\ndC52YS51bmljYXJlLmNvbYIkc2VjdXJlLWdhdGV3YXkudWF0LnZhLmVtcGlyZWJsdWUuY29tgiRz\nZWN1cmUtZ2F0ZXdheS51YXQudmEuYW1lcmlncm91cC5jb22CI3NlY3VyZS1nYXRld2F5LnVhdC52\nYS5teWJjYnN3bnkuY29tgiZzZWN1cmUtZ2F0ZXdheS51YXQudmEubXlhbWVyaWdyb3VwLmNvbYIk\nc2VjdXJlLWdhdGV3YXkudWF0LnZhLmJjYnNkaXJlY3QuY29tgidzZWN1cmUtZ2F0ZXdheS51YXQu\ndmEuaGVhbHRoeWJsdWVuZS5jb22CJ3NlY3VyZS1nYXRld2F5LnVhdC52YS5oZWFsdGh5Ymx1ZW1v\nLmNvbYInc2VjdXJlLWdhdGV3YXkudWF0LnZhLmhlYWx0aHlibHVlbGEuY29tMA4GA1UdDwEB/wQE\nAwIFoDAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwgYsGA1UdHwSBgzCBgDA+oDygOoY4\naHR0cDovL2NybDMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0VExTUlNBU0hBMjU2MjAyMENBMS5jcmww\nPqA8oDqGOGh0dHA6Ly9jcmw0LmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFRMU1JTQVNIQTI1NjIwMjBD\nQTEuY3JsMD4GA1UdIAQ3MDUwMwYGZ4EMAQICMCkwJwYIKwYBBQUHAgEWG2h0dHA6Ly93d3cuZGln\naWNlcnQuY29tL0NQUzB9BggrBgEFBQcBAQRxMG8wJAYIKwYBBQUHMAGGGGh0dHA6Ly9vY3NwLmRp\nZ2ljZXJ0LmNvbTBHBggrBgEFBQcwAoY7aHR0cDovL2NhY2VydHMuZGlnaWNlcnQuY29tL0RpZ2lD\nZXJ0VExTUlNBU0hBMjU2MjAyMENBMS5jcnQwDAYDVR0TAQH/BAIwADCCAX0GCisGAQQB1nkCBAIE\nggFtBIIBaQFnAHUARqVV63X6kSAwtaKJafTzfREsQXS+/Um4havy/HD+bUcAAAF50guC1AAABAMA\nRjBEAiAgZSRC5EN8jbTnypBaAXQ/f+0Pn6ptGUeUZFnD0p0DBgIgFslOE3DX8OTzO4TUs+cI0H6n\nfMrxPnnd7OGO/SMTGyAAdgAiRUUHWVUkVpY/oS/x922G4CMmY63AS39dxoNcbuIPAgAAAXnSC4Lp\nAAAEAwBHMEUCIQC/5g7kpSFGnlAGNng4cFg6oQ8APiJPaFXI2DAmqzkvZQIgfC6lkI5l1vu1x2/S\np8z0EW4xSnLuaeincbzQp5yG8F0AdgBRo7D1/QF5nFZtuDd4jwykeswbJ8v3nohCmg3+1IsF5QAA\nAXnSC4MSAAAEAwBHMEUCICCJdG5T13anU3fD8/eD3tbfiKIt2i+NCAQwPmTAesTgAiEA3/lwVsUk\nkOZpQorWBf4rldm/brkuiHHlesnR2tazaxQwDQYJKoZIhvcNAQELBQADggEBAB9pH7oCRiWckG9t\n9hN3iFbmr7Ne32P+sgJcgRfXaW6U8FJ/bdewfjsyGZ+Z36YLJDsIe52SioK3aIKbyVgn53/EqRIk\nDVpaXRn47wIYrFto6qDy4mMTpgvA4CeJXXp39zhc86SWG2WFuHZvCnq9tcmy0Ux7xZZUB5QdmEHE\n6r3Amov+IKNI/1PdZeTZ0y/PPbcTciggWDSGTLYdUImcd/o55/LKPE8q617xVCgb8+ydNKcIyLys\ngeEvwuem87h43YFZtUBVdCfMVxAdUzwq1BNM46IWsvDFiZyDN6tuJ+WaC/axVeifgxu1dyLmie4b\nZ2IbhVIjoHSuWeDwGfqaPgA=\n-----END CERTIFICATE-----"
+    newPublicKey = b"-----BEGIN CERTIFICATE-----\nMIIG7zCCBdegAwIBAgIQecg6ZM9gJgEAel6Bk/A1TzANBgkqhkiG9w0BAQsFADCBujELMAkGA1UE\nBhMCVVMxFjAUBgNVBAoTDUVudHJ1c3QsIEluYy4xKDAmBgNVBAsTH1NlZSB3d3cuZW50cnVzdC5u\nZXQvbGVnYWwtdGVybXMxOTA3BgNVBAsTMChjKSAyMDEyIEVudHJ1c3QsIEluYy4gLSBmb3IgYXV0\naG9yaXplZCB1c2Ugb25seTEuMCwGA1UEAxMlRW50cnVzdCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0\neSAtIEwxSzAeFw0yMzAzMTYxNDU3MThaFw0yNDAzMTUxNDU3MThaMIGGMQswCQYDVQQGEwJVUzEQ\nMA4GA1UECBMHSW5kaWFuYTEVMBMGA1UEBxMMSW5kaWFuYXBvbGlzMR4wHAYDVQQKExVFbGV2YW5j\nZSBIZWFsdGgsIEluYy4xLjAsBgNVBAMTJUVsZXZhbmNlSGVhbHRob2lkYy5lbGV2YW5jZWhlYWx0\naC5jb20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCXpkY24UWQXhcAuVfwTRI5GhTi\nqghuBRAsd6XEe5A3BO4zeqXwobxoSfy5BbOjUIL//pU+hB5e01sBaEa9G0eAFInVxav7xR1tZlKE\nwnJ76iPR1M0Y0v3HKJlymtBydVcIXaABbxmha++6DpIMaFcEgULOYHLlkEpU1oKq/ndChL6jd7m9\nsmMY/CM1DR+ALMsOaJj2Sg2fFE5b0h1D/NvgByGA9UO3/i3YZORazPmwjm78sSIVm2w2w0pOfZ2a\nMyBhoVq3yC1NmH8O/+M4H0jchHfhLiduMcEguLwUM4VcQ0EqTkMK2BaSK472y+5yDTGFdvVNcDP3\nYERRnlAQUcqzAgMBAAGjggMhMIIDHTAMBgNVHRMBAf8EAjAAMB0GA1UdDgQWBBSt3iK0mxM59kup\np7PIEXTcQbiVzzAfBgNVHSMEGDAWgBSConB03bxTP8971PfNf6dgxgpMvzBoBggrBgEFBQcBAQRc\nMFowIwYIKwYBBQUHMAGGF2h0dHA6Ly9vY3NwLmVudHJ1c3QubmV0MDMGCCsGAQUFBzAChidodHRw\nOi8vYWlhLmVudHJ1c3QubmV0L2wxay1jaGFpbjI1Ni5jZXIwMwYDVR0fBCwwKjAooCagJIYiaHR0\ncDovL2NybC5lbnRydXN0Lm5ldC9sZXZlbDFrLmNybDAwBgNVHREEKTAngiVFbGV2YW5jZUhlYWx0\naG9pZGMuZWxldmFuY2VoZWFsdGguY29tMA4GA1UdDwEB/wQEAwIFoDAdBgNVHSUEFjAUBggrBgEF\nBQcDAQYIKwYBBQUHAwIwTAYDVR0gBEUwQzA3BgpghkgBhvpsCgEFMCkwJwYIKwYBBQUHAgEWG2h0\ndHBzOi8vd3d3LmVudHJ1c3QubmV0L3JwYTAIBgZngQwBAgIwggF9BgorBgEEAdZ5AgQCBIIBbQSC\nAWkBZwB1AHPZnokbTJZ4oCB9R53mssYc0FFecRkqjGuAEHrBd3K1AAABhurs5R4AAAQDAEYwRAIg\nLMtQQW9kplKm3HSEGRKaOQi6uY3Boo/Ja5KDgNIkG20CIDYAM0LKvFyV1y3/lVny/+VP2jtEYX+9\ng9m7bbBpQv71AHcAdv+IPwq2+5VRwmHM9Ye6NLSkzbsp3GhCCp/mZ0xaOnQAAAGG6uzlBwAABAMA\nSDBGAiEAh1ezKabhsu5YMZPN1gm1cThK4q3IKwXRnm9Nre8CisACIQDOFAIXHScLqGkdRz7f3XwJ\nWHB0hY0E06QLdbrIXJuv0wB1ADtTd3U+LbmAToswWwb+QDtn2E/D9Me9AA0tcm/h+tQXAAABhurs\n5S0AAAQDAEYwRAIgL21GHoSzSBwpKzwQRPiigQPqreozYuahQasmgqWYGOgCIErVAB3UTBztfqBY\nA2XuzBSAbSisPLUjrF5BKpFLaPSCMA0GCSqGSIb3DQEBCwUAA4IBAQCbYdFDJEscULyzKiOxpaX5\n2uW3mOFqTxMWZHlPGH46yrm/V337TzN3yyYNyZc3Y0MKxETqkvWUQdNj6EzoI0urEpFDpcPfUeSW\nz5YgjMIAf9DocMP4e6nKqUzy2FdWb1N/dslYS2vU09nj3SqF1Ykbo3pa11shvBy+HaN8vy7mD5jk\n5iBYB/Ti+PZRvN+xGHYyFWlDDKPKqyv7y6MNao88MDjiEx2/RvjTXuoJIk9tbqC4xlWH5xFIgu3l\nFZ4P0yy2X9pKJWKR9pTWN66gcKGPx94JSESm3ZmJUSvHQ7RGhfI1xYJX3fQs0ZVfarQx7xf5+fps\n8ncCibU85pWIFNei\n-----END CERTIFICATE-----"
+    publicKey = b"-----BEGIN CERTIFICATE-----\nMIIJkzCCCHugAwIBAgIQAYvEsTn3wDQQNw1gMLWX6DANBgkqhkiG9w0BAQsFADBP\nMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMSkwJwYDVQQDEyBE\naWdpQ2VydCBUTFMgUlNBIFNIQTI1NiAyMDIwIENBMTAeFw0yMjA1MTIwMDAwMDBa\nFw0yMzA2MTIyMzU5NTlaMHQxCzAJBgNVBAYTAlVTMRAwDgYDVQQIEwdJbmRpYW5h\nMRUwEwYDVQQHEwxJbmRpYW5hcG9saXMxFTATBgNVBAoTDEFudGhlbSwgSW5jLjEl\nMCMGA1UEAxMcc2VjdXJlLWdhdGV3YXkuYW50aGVtaW5jLmNvbTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAK6/pDKKo9dlS5fzhEFznX6MEcUBnh+on1wL\nXyjFOZ1uRlI6wGWBtCqr1nYeNIEp3bEnMTWWFSIP9rkxSP7NvXrOem1bsr40qu68\n7WkI63jr2FuPDeygutML3JFaZ/pjbVZN9garGDV8CwKd7t2zILAiuOsAvqo/gL48\n23geIhVC1VRarmF+faJTBoZ30QRsODkq4C0CRHY11hzB+W5i8wh/Fx8iqyYNQImS\nFycHmSPD6rfcomITCglbnupg7XLlmLufNZdC/BOo+oHovgYSljzopjdP2Tq2OSEm\nO1AgpdhpVileDaFw8haJgO7UgZgey7ziU25YgyOhbuv7VaA9+c8CAwEAAaOCBkQw\nggZAMB8GA1UdIwQYMBaAFLdrouqoqoSMeeq02g+YssWVdrn0MB0GA1UdDgQWBBQ/\n3atJojgK+O7fXiHdU3EmmCJd8jCCAu8GA1UdEQSCAuYwggLighxzZWN1cmUtZ2F0\nZXdheS5hbnRoZW1pbmMuY29tghxzZWN1cmUtZ2F0ZXdheS5tby5hbnRoZW0uY29t\nghxzZWN1cmUtZ2F0ZXdheS5tby5iY2JzZ2EuY29tgh1zZWN1cmUtZ2F0ZXdheS5t\nby51bmljYXJlLmNvbYImc2VjdXJlLWdhdGV3YXkubW8uZW1waXJlaGVhbHRoY2Fy\nZS5jb22CIHNlY3VyZS1nYXRld2F5Lm1vLmVtcGlyZWJsdWUuY29tgiBzZWN1cmUt\nZ2F0ZXdheS5tby5hbWVyaWdyb3VwLmNvbYIcc2VjdXJlLWdhdGV3YXkubXliY2Jz\nd255LmNvbYIfc2VjdXJlLWdhdGV3YXkubXlhbWVyaWdyb3VwLmNvbYIZc2VjdXJl\nLWdhdGV3YXkuYW50aGVtLmNvbYIZc2VjdXJlLWdhdGV3YXkuYmNic2dhLmNvbYIa\nc2VjdXJlLWdhdGV3YXkudW5pY2FyZS5jb22CI3NlY3VyZS1nYXRld2F5LmVtcGly\nZWhlYWx0aGNhcmUuY29tgh1zZWN1cmUtZ2F0ZXdheS5lbXBpcmVibHVlLmNvbYId\nc2VjdXJlLWdhdGV3YXkuYW1lcmlncm91cC5jb22CH3NlY3VyZS1nYXRld2F5LnZh\nLmFudGhlbWluYy5jb22CHHNlY3VyZS1nYXRld2F5LnZhLmFudGhlbS5jb22CHHNl\nY3VyZS1nYXRld2F5LnZhLmJjYnNnYS5jb22CHXNlY3VyZS1nYXRld2F5LnZhLnVu\naWNhcmUuY29tgiZzZWN1cmUtZ2F0ZXdheS52YS5lbXBpcmVoZWFsdGhjYXJlLmNv\nbYIgc2VjdXJlLWdhdGV3YXkudmEuZW1waXJlYmx1ZS5jb22CIHNlY3VyZS1nYXRl\nd2F5LnZhLmFtZXJpZ3JvdXAuY29tgh9zZWN1cmUtZ2F0ZXdheS5tby5hbnRoZW1p\nbmMuY29tMA4GA1UdDwEB/wQEAwIFoDAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYB\nBQUHAwIwgY8GA1UdHwSBhzCBhDBAoD6gPIY6aHR0cDovL2NybDMuZGlnaWNlcnQu\nY29tL0RpZ2lDZXJ0VExTUlNBU0hBMjU2MjAyMENBMS00LmNybDBAoD6gPIY6aHR0\ncDovL2NybDQuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0VExTUlNBU0hBMjU2MjAyMENB\nMS00LmNybDA+BgNVHSAENzA1MDMGBmeBDAECAjApMCcGCCsGAQUFBwIBFhtodHRw\nOi8vd3d3LmRpZ2ljZXJ0LmNvbS9DUFMwfwYIKwYBBQUHAQEEczBxMCQGCCsGAQUF\nBzABhhhodHRwOi8vb2NzcC5kaWdpY2VydC5jb20wSQYIKwYBBQUHMAKGPWh0dHA6\nLy9jYWNlcnRzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFRMU1JTQVNIQTI1NjIwMjBD\nQTEtMS5jcnQwCQYDVR0TBAIwADCCAXwGCisGAQQB1nkCBAIEggFsBIIBaAFmAHYA\n6D7Q2j71BjUy51covIlryQPTy9ERa+zraeF3fW0GvW4AAAGAuedTIAAABAMARzBF\nAiAtMtlG9VHwrJtc+BwURKXK4xOpqta4R2vMb0p3TslgdgIhANIVAiHtQIo01xoo\niC2Bgbly4//4hbFD96xByrMt7LSPAHUANc8ZG7+xbFe/D61MbULLu7YnICZR6j/h\nKu+oA8M71kwAAAGAuedTHAAABAMARjBEAiByln5T66rLflY/3Yhy1e8mkfaZJaTz\nvk8WwCaPJ9FzCgIgJJu9ih0f1VASApay1syozQAK/zIylHbtUFiZE7vO3QgAdQCz\nc3cH4YRQ+GOG1gWp3BEJSnktsWcMC4fc8AMOeTalmgAAAYC551NEAAAEAwBGMEQC\nIClyWL5m4BjnYri8fPtnRLuDbDpgEx3u9qxo47c1uAfiAiARcFqwcEIM3T8EAGHV\nqSPFQFPuBfUmkDhWvzfhRBQwhTANBgkqhkiG9w0BAQsFAAOCAQEAV1hUUmi6JYnV\nTV4HQx9ZAbP1aWsCEoFnMRu0ApX3COLOybyDYD66U1L+dViqRTyFyfFr+p+vzVfw\n5i7oUeHsj3ij7laNBegWVH/EHlpg7craOwWBn5Cb6k2lzCCL+ksjEqT2b9oenzN2\nmzwY9dEJCUAObI8w3toJcIQucw8bZ8ZSrbc/X+rB0Jmt1JWCeUbnx2AXkthNhQkm\nZWCoqyAPwYgsSv2MSlxjHN0DyorMMpj2MpjRCYzbDxNZplFSVyTDlIt4SHOBdETb\npUz5zz6gwvLSrcOfpAVvzKMF1GIcc4sdfV1OMHKpdppXPPqKsLuf/l51cmzJxL2R\nEyPd0NUZyQ==\n-----END CERTIFICATE-----"
+    cert_obj = load_pem_x509_certificate(publicKey)
+    public_key = cert_obj.public_key()
+    new_cert_obj = load_pem_x509_certificate(newPublicKey)
+    new_public_key = new_cert_obj.public_key()
+
+    #Decode a JWT token inline
+    try:
+        decoded = jwt.decode(access_token, public_key, algorithms=["RS256"], audience="https://securefed.antheminc.com")
+    except Exception as e:
+        print("Error in first attempt")
+        print(e)
+        try:
+            decoded = jwt.decode(access_token, new_public_key, algorithms=["RS256"], audience="https://securefed.antheminc.com")
+        except Exception as e:
+            print("Error in second attempt")
+            print(e)
+            policy.denyAllMethods()
+        else:
+            policy.allowAllMethods()
+    else:
+        policy.allowAllMethods()
+    
+    """if (event['authorizationToken'] == "test123") :
+        policy.allowAllMethods()
+    else :
+        policy.denyAllMethods()"""
+        
+
+    # Finally, build the policy
+    authResponse = policy.build()
+ 
+    # new! -- add additional key-value pairs associated with the authenticated principal
+    # these are made available by APIGW like so: $context.authorizer.<key>
+    # additional context is cached
+    context = {
+        'key': 'value', # $context.authorizer.key -> value
+        'number' : 1,
+        'bool' : True
+    }
+    # context['arr'] = ['foo'] <- this is invalid, APIGW will not accept it
+    # context['obj'] = {'foo':'bar'} <- also invalid
+ 
+    authResponse['context'] = context
+    
+    return authResponse
+
+class HttpVerb:
+    GET     = "GET"
+    POST    = "POST"
+    PUT     = "PUT"
+    PATCH   = "PATCH"
+    HEAD    = "HEAD"
+    DELETE  = "DELETE"
+    OPTIONS = "OPTIONS"
+    ALL     = "*"
+
+class AuthPolicy(object):
+    awsAccountId = ""
+    """The AWS account id the policy will be generated for. This is used to create the method ARNs."""
+    principalId = ""
+    """The principal used for the policy, this should be a unique identifier for the end user."""
+    version = "2012-10-17"
+    """The policy version used for the evaluation. This should always be '2012-10-17'"""
+    pathRegex = "^[/.a-zA-Z0-9-\*]+$"
+    """The regular expression used to validate resource paths for the policy"""
+
+    """these are the internal lists of allowed and denied methods. These are lists
+    of objects and each object has 2 properties: A resource ARN and a nullable
+    conditions statement.
+    the build method processes these lists and generates the approriate
+    statements for the final policy"""
+    allowMethods = []
+    denyMethods = []
+
+    
+    restApiId = "<<restApiId>>"
+    """ Replace the placeholder value with a default API Gateway API id to be used in the policy. 
+    Beware of using '*' since it will not simply mean any API Gateway API id, because stars will greedily expand over '/' or other separators. 
+    See https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_resource.html for more details. """    
+
+    region = "<<region>>"
+    """ Replace the placeholder value with a default region to be used in the policy. 
+    Beware of using '*' since it will not simply mean any region, because stars will greedily expand over '/' or other separators. 
+    See https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_resource.html for more details. """    
+
+    stage = "<<stage>>"
+    """ Replace the placeholder value with a default stage to be used in the policy. 
+    Beware of using '*' since it will not simply mean any stage, because stars will greedily expand over '/' or other separators. 
+    See https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_resource.html for more details. """
+
+    def __init__(self, principal, awsAccountId):
+        self.awsAccountId = awsAccountId
+        self.principalId = principal
+        self.allowMethods = []
+        self.denyMethods = []
+
+    def _addMethod(self, effect, verb, resource, conditions):
+        """Adds a method to the internal lists of allowed or denied methods. Each object in
+        the internal list contains a resource ARN and a condition statement. The condition
+        statement can be null."""
+        if verb != "*" and not hasattr(HttpVerb, verb):
+            raise NameError("Invalid HTTP verb " + verb + ". Allowed verbs in HttpVerb class")
+        resourcePattern = re.compile(self.pathRegex)
+        if not resourcePattern.match(resource):
+            raise NameError("Invalid resource path: " + resource + ". Path should match " + self.pathRegex)
+
+        if resource[:1] == "/":
+            resource = resource[1:]
+
+        resourceArn = ("arn:aws:execute-api:" +
+            self.region + ":" +
+            self.awsAccountId + ":" +
+            self.restApiId + "/" +
+            self.stage + "/" +
+            verb + "/" +
+            resource)
+
+        if effect.lower() == "allow":
+            self.allowMethods.append({
+                'resourceArn' : resourceArn,
+                'conditions' : conditions
+            })
+        elif effect.lower() == "deny":
+            self.denyMethods.append({
+                'resourceArn' : resourceArn,
+                'conditions' : conditions
+            })
+
+    def _getEmptyStatement(self, effect):
+        """Returns an empty statement object prepopulated with the correct action and the
+        desired effect."""
+        statement = {
+            'Action': 'execute-api:Invoke',
+            'Effect': effect[:1].upper() + effect[1:].lower(),
+            'Resource': []
+        }
+
+        return statement
+
+    def _getStatementForEffect(self, effect, methods):
+        """This function loops over an array of objects containing a resourceArn and
+        conditions statement and generates the array of statements for the policy."""
+        statements = []
+
+        if len(methods) > 0:
+            statement = self._getEmptyStatement(effect)
+
+            for curMethod in methods:
+                if curMethod['conditions'] is None or len(curMethod['conditions']) == 0:
+                    statement['Resource'].append(curMethod['resourceArn'])
+                else:
+                    conditionalStatement = self._getEmptyStatement(effect)
+                    conditionalStatement['Resource'].append(curMethod['resourceArn'])
+                    conditionalStatement['Condition'] = curMethod['conditions']
+                    statements.append(conditionalStatement)
+
+            statements.append(statement)
+
+        return statements
+
+    def allowAllMethods(self):
+        """Adds a '*' allow to the policy to authorize access to all methods of an API"""
+        self._addMethod("Allow", HttpVerb.ALL, "*", [])
+
+    def denyAllMethods(self):
+        """Adds a '*' allow to the policy to deny access to all methods of an API"""
+        self._addMethod("Deny", HttpVerb.ALL, "*", [])
+
+    def allowMethod(self, verb, resource):
+        """Adds an API Gateway method (Http verb + Resource path) to the list of allowed
+        methods for the policy"""
+        self._addMethod("Allow", verb, resource, [])
+
+    def denyMethod(self, verb, resource):
+        """Adds an API Gateway method (Http verb + Resource path) to the list of denied
+        methods for the policy"""
+        self._addMethod("Deny", verb, resource, [])
+
+    def allowMethodWithConditions(self, verb, resource, conditions):
+        """Adds an API Gateway method (Http verb + Resource path) to the list of allowed
+        methods and includes a condition for the policy statement. More on AWS policy
+        conditions here: http://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements.html#Condition"""
+        self._addMethod("Allow", verb, resource, conditions)
+
+    def denyMethodWithConditions(self, verb, resource, conditions):
+        """Adds an API Gateway method (Http verb + Resource path) to the list of denied
+        methods and includes a condition for the policy statement. More on AWS policy
+        conditions here: http://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements.html#Condition"""
+        self._addMethod("Deny", verb, resource, conditions)
+
+    def build(self):
+        """Generates the policy document based on the internal lists of allowed and denied
+        conditions. This will generate a policy with two main statements for the effect:
+        one statement for Allow and one statement for Deny.
+        Methods that includes conditions will have their own statement in the policy."""
+        if ((self.allowMethods is None or len(self.allowMethods) == 0) and
+            (self.denyMethods is None or len(self.denyMethods) == 0)):
+            raise NameError("No statements defined for the policy")
+
+        policy = {
+            'principalId' : self.principalId,
+            'policyDocument' : {
+                'Version' : self.version,
+                'Statement' : []
+            }
+        }
+
+        policy['policyDocument']['Statement'].extend(self._getStatementForEffect("Allow", self.allowMethods))
+        policy['policyDocument']['Statement'].extend(self._getStatementForEffect("Deny", self.denyMethods))
+
+        return policy
